@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>html,body{margin:0}</style>
+<title>Heart of Love</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@1,600&family=Noto+Sans+Thai:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: caption on top, one large square stage with the heart centred, two toggles and a hint beneath. */
+:root {
+  --bg: #13050b;
+  --surface: #26101a;
+  --fg: #fde8ee;
+  --muted: #c79aa9;
+  --rose: #ff4f7e;
+  --blush: #ffd0dc;
+  --crimson: #7d0b2c;
+  --line: #4d2334;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Noto Sans Thai', 'Noto Sans', system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  padding-inline: 16px;
+  padding-block: 20px 24px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+header { width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 4px; }
+h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: clamp(1.9rem, 6vw, 2.8rem);
+  line-height: 1.05;
+  color: var(--blush);
+  text-wrap: balance;
+}
+header p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+.stage {
+  position: relative;
+  width: 100%;
+  max-width: 760px;
+  flex: 1 1 auto;
+  min-height: 340px;
+  aspect-ratio: 1 / 1;
+  max-height: 84vh;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--rose) 20%, transparent), transparent 78%);
+}
+canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+canvas.drag { cursor: grabbing; }
+.controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+button {
+  font: 500 0.9rem var(--font-body);
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+button svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+button[aria-pressed="true"] { color: var(--blush); }
+button[aria-pressed="false"] { color: var(--muted); }
+button[aria-pressed="true"] {
+  border-color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 22%, var(--surface));
+}
+a.btn {
+  font: 500 0.9rem var(--font-body);
+  color: var(--fg);
+  background: var(--rose);
+  background: color-mix(in srgb, var(--rose) 70%, var(--crimson));
+  border: 1px solid var(--rose);
+  border-radius: 999px;
+  padding: 10px 18px;
+  text-decoration: none;
+}
+button:focus-visible, a.btn:focus-visible { outline: 2px solid var(--blush); outline-offset: 2px; }
+.hint { margin: 0; color: var(--muted); font-size: 0.8rem; }
+</style>
+
+<div class="stage" id="stage">
+  <canvas id="c" role="img" aria-label="หัวใจ 3 มิติที่เรียงจากคำว่า love"></canvas>
+</div>
+<div class="controls">
+  <button id="spin" type="button" aria-pressed="true" aria-label="หมุนอัตโนมัติ" title="หมุนอัตโนมัติ">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+  </button>
+  <button id="beat" type="button" aria-pressed="true" aria-label="หัวใจเต้น" title="หัวใจเต้น">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9-9.2C2 8 4 5.5 6.8 5.5c1.9 0 3.5 1 5.2 3 1.7-2 3.3-3 5.2-3C20 5.5 22 8 21 11.3c-1.5 4.6-9 9.2-9 9.2z"/></svg>
+  </button>
+  <button id="music" type="button" aria-pressed="false" aria-label="เปิดเพลง" title="เปิดเพลง">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+  </button>
+</div>
+<script>
+(function () {
+  var canvas = document.getElementById('c');
+  var stage = document.getElementById('stage');
+  var ctx = canvas.getContext('2d');
+  var cs = getComputedStyle(document.documentElement);
+
+  function parseHex(name, fallback) {
+    var h = (cs.getPropertyValue(name).trim() || fallback).replace('#', '');
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  var C0 = parseHex('--crimson', '#7d0b2c');
+  var C1 = parseHex('--rose', '#ff4f7e');
+  var C2 = parseHex('--blush', '#ffd0dc');
+  function ramp(t) {
+    var a, b, u;
+    if (t < 0.55) { a = C0; b = C1; u = t / 0.55; } else { a = C1; b = C2; u = (t - 0.55) / 0.45; }
+    return [0, 1, 2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * u); });
+  }
+
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- word sprites, one per brightness level ---------- */
+  var NB = 24, SW = 160, SH = 70;
+  var WORD_W = 2.8;                 // world units covered by sprite width
+  var K = WORD_W / SW;              // world units per sprite pixel
+  var sprites = [];
+  function buildSprites() {
+    for (var i = 0; i < NB; i++) {
+      var c = document.createElement('canvas');
+      c.width = SW; c.height = SH;
+      var g = c.getContext('2d');
+      var fs = 60;
+      g.font = 'italic 600 ' + fs + 'px Fraunces, Georgia, serif';
+      var m = g.measureText('love');
+      fs = Math.floor(fs * (SW * 0.84) / m.width);
+      g.font = 'italic 600 ' + fs + 'px Fraunces, Georgia, serif';
+      m = g.measureText('love');
+      var asc = m.actualBoundingBoxAscent || fs * 0.7;
+      var desc = m.actualBoundingBoxDescent || 0;
+      var rgb = ramp(i / (NB - 1));
+      g.textAlign = 'center';
+      g.textBaseline = 'alphabetic';
+      g.shadowColor = 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',0.55)';
+      g.shadowBlur = 7;
+      g.fillStyle = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+      g.fillText('love', SW / 2, SH / 2 + (asc - desc) / 2);
+      sprites.push(c);
+    }
+  }
+
+  /* ---------- heart surface ---------- */
+  var S = 15, YC = 0.1;
+  function surf(th, ph) {
+    var cp = Math.cos(ph), dx = cp * Math.cos(th), dy = cp * Math.sin(th), dz = Math.sin(ph);
+    function g(r) {
+      var x = dx * r, y = dy * r, z = dz * r;
+      var a = x * x + 2.25 * y * y + z * z - 1;
+      var z3 = z * z * z;
+      return a * a * a - x * x * z3 - 0.1125 * y * y * z3;
+    }
+    var r = 0.05, step = 0.03;
+    while (r < 2 && g(r) < 0) r += step;
+    var lo = r - step, hi = r;
+    for (var i = 0; i < 16; i++) {
+      var mid = (lo + hi) / 2;
+      if (g(mid) < 0) lo = mid; else hi = mid;
+    }
+    var R = (lo + hi) / 2;
+    return [dx * R * S, (dz * R - YC) * S, dy * R * S];
+  }
+  function norm(v) {
+    var l = Math.hypot(v[0], v[1], v[2]) + 1e-9;
+    return [v[0] / l, v[1] / l, v[2] / l];
+  }
+  function cross(a, b) {
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  }
+  function sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+
+  var words = [];
+  function buildWords() {
+    var rowH = 1.12, spacing = 2.7;
+    var refP = surf(1, 0.2);
+    var refN = cross(sub(surf(1.01, 0.2), surf(0.99, 0.2)), sub(surf(1, 0.21), surf(1, 0.19)));
+    var sgn = (refN[0] * refP[0] + refN[1] * refP[1] + refN[2] * refP[2]) >= 0 ? 1 : -1;
+
+    var rows = [], s = 0, next = rowH * 0.5, dphi = 0.01;
+    for (var ph = -Math.PI / 2 + 0.03; ph < Math.PI / 2 - 0.03; ph += dphi) {
+      var m = 0;
+      for (var q = 0; q < 6; q++) {
+        var th0 = q * 1.047 + 0.3;
+        var a = surf(th0, ph), b = surf(th0, ph + dphi);
+        m += Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      }
+      s += m / 6;
+      if (s >= next) { rows.push(ph); next += rowH; }
+    }
+
+    var M = 240;
+    rows.forEach(function (ph, ri) {
+      var pts = [], cum = [0], k, p;
+      for (k = 0; k <= M; k++) pts.push(surf(2 * Math.PI * k / M, ph));
+      for (k = 1; k <= M; k++) {
+        p = pts[k]; var o = pts[k - 1];
+        cum.push(cum[k - 1] + Math.hypot(p[0] - o[0], p[1] - o[1], p[2] - o[2]));
+      }
+      var L = cum[M], n = Math.floor(L / spacing);
+      if (n < 3) return;
+      var sp = L / n, off = (ri % 2) * 0.5;
+      for (var j = 0; j < n; j++) {
+        var target = ((j + off) * sp) % L, idx = 0;
+        while (idx < M - 1 && cum[idx + 1] <= target) idx++;
+        var span = cum[idx + 1] - cum[idx] || 1;
+        var th = 2 * Math.PI * (idx + (target - cum[idx]) / span) / M;
+        var h = 0.01;
+        var P = surf(th, ph);
+        var Pt = sub(surf(th + h, ph), surf(th - h, ph));
+        var Pp = sub(surf(th, ph + h), surf(th, ph - h));
+        var T = norm(Pt).map(function (v) { return -v; });
+        var D = norm(Pp).map(function (v) { return -v; });
+        var N = norm(cross(Pt, Pp)).map(function (v) { return v * sgn; });
+        words.push({ P: P, T: T, D: D, N: N });
+      }
+    });
+  }
+
+  /* ---------- state ---------- */
+  var W = 0, H = 0, dpr = 1, F = 1, cx = 0, cy = 0;
+  var DCAM = 90;
+  var yaw = 0, pitch = 0.14, vel = 0;
+  var autoOn = true, beatOn = !reduce;
+  var autoSpeed = reduce ? 0.18 : 0.42;
+  var dragging = false, lastX = 0, lastY = 0, lastT = 0;
+  var time = 0, prev = 0;
+  var order = [], Z = [], X = [], Y = [], TT = [], DD = [], NN = [];
+
+  function resize() {
+    var r = stage.getBoundingClientRect();
+    W = Math.max(200, r.width); H = Math.max(200, r.height);
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    cx = W / 2; cy = H / 2;
+    F = (Math.min(W, H) * 0.7 / 34) * DCAM;
+  }
+
+  function heartbeat(t) {
+    var ph = t % 1.25;
+    function bump(c, w) { var d = (ph - c) / w; return Math.exp(-d * d); }
+    return bump(0.12, 0.07) + 0.65 * bump(0.34, 0.08);
+  }
+
+  var LX = -0.35, LY = 0.55, LZ = 0.75;
+  var ll = Math.hypot(LX, LY, LZ); LX /= ll; LY /= ll; LZ /= ll;
+  var HX = LX, HY = LY, HZ = LZ + 1;
+  var hl = Math.hypot(HX, HY, HZ); HX /= hl; HY /= hl; HZ /= hl;
+
+  function frame(now) {
+    var dt = Math.min(0.05, (now - prev) / 1000 || 0.016);
+    prev = now; time += dt;
+
+    if (!dragging) {
+      vel += ((autoOn ? autoSpeed : 0) - vel) * Math.min(1, dt * 2);
+      yaw += vel * dt;
+      pitch += (0.14 - pitch) * Math.min(1, dt * 1.2);
+    }
+    var sc = 1 + (beatOn ? 0.05 * heartbeat(time) : 0);
+
+    var sy = Math.sin(yaw), cyw = Math.cos(yaw), sp = Math.sin(pitch), cp = Math.cos(pitch);
+    var n = words.length, i, w;
+    function rot(v, out, k) {
+      var x1 = v[0] * cyw + v[2] * sy;
+      var z1 = -v[0] * sy + v[2] * cyw;
+      out[0] = x1; out[1] = v[1] * cp - z1 * sp; out[2] = v[1] * sp + z1 * cp;
+    }
+    var o = [0, 0, 0];
+    for (i = 0; i < n; i++) {
+      w = words[i];
+      rot(w.P, o); X[i] = o[0] * sc; Y[i] = o[1] * sc; Z[i] = o[2] * sc;
+      rot(w.T, o); TT[i][0] = o[0]; TT[i][1] = o[1];
+      rot(w.D, o); DD[i][0] = o[0]; DD[i][1] = o[1];
+      rot(w.N, o); NN[i][0] = o[0]; NN[i][1] = o[1]; NN[i][2] = o[2];
+    }
+    order.sort(function (a, b) { return Z[a] - Z[b]; });
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (var q = 0; q < n; q++) {
+      i = order[q];
+      var nz = NN[i][2];
+      var f = F / (DCAM - Z[i]);
+      var kk = f * K * sc * dpr;
+      var alpha, b;
+      if (nz > 0) {
+        var nl = NN[i][0] * LX + NN[i][1] * LY + nz * LZ;
+        var nh = NN[i][0] * HX + NN[i][1] * HY + nz * HZ;
+        b = 0.16 + 0.58 * Math.max(0, nl) + 0.2 * nz + 0.45 * Math.pow(Math.max(0, nh), 28);
+        alpha = 1;
+      } else {
+        b = 0.08; alpha = 0.12;
+      }
+      b = Math.max(0, Math.min(1, b));
+      ctx.globalAlpha = alpha;
+      ctx.setTransform(
+        TT[i][0] * kk, -TT[i][1] * kk,
+        DD[i][0] * kk, -DD[i][1] * kk,
+        (cx + X[i] * f) * dpr, (cy - Y[i] * f) * dpr
+      );
+      ctx.drawImage(sprites[Math.round(b * (NB - 1))], -SW / 2, -SH / 2);
+    }
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- input ---------- */
+  canvas.addEventListener('pointerdown', function (e) {
+    dragging = true; lastX = e.clientX; lastY = e.clientY; lastT = performance.now();
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    canvas.classList.add('drag');
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    var now = performance.now(), dt = Math.max(0.008, (now - lastT) / 1000);
+    var dx = e.clientX - lastX, dy = e.clientY - lastY;
+    yaw += dx * 0.011;
+    pitch = Math.max(-0.9, Math.min(0.9, pitch + dy * 0.008));
+    vel = Math.max(-6, Math.min(6, (dx * 0.011) / dt));
+    lastX = e.clientX; lastY = e.clientY; lastT = now;
+  });
+  function endDrag() { dragging = false; canvas.classList.remove('drag'); }
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  var spinBtn = document.getElementById('spin');
+  var beatBtn = document.getElementById('beat');
+  spinBtn.setAttribute('aria-pressed', String(autoOn));
+  beatBtn.setAttribute('aria-pressed', String(beatOn));
+  spinBtn.addEventListener('click', function () {
+    autoOn = !autoOn; spinBtn.setAttribute('aria-pressed', String(autoOn));
+  });
+  beatBtn.addEventListener('click', function () {
+    beatOn = !beatOn; beatBtn.setAttribute('aria-pressed', String(beatOn));
+  });
+
+  var song = new Audio('song.mp3');
+  song.loop = true;
+  song.preload = 'auto';
+  var musicBtn = document.getElementById('music');
+  musicBtn.addEventListener('click', function () {
+    if (song.paused) {
+      var p = song.play();
+      if (p && p.then) {
+        p.then(function () { musicBtn.setAttribute('aria-pressed', 'true'); })
+         .catch(function () { musicBtn.setAttribute('aria-pressed', 'false'); });
+      } else {
+        musicBtn.setAttribute('aria-pressed', 'true');
+      }
+    } else {
+      song.pause();
+      musicBtn.setAttribute('aria-pressed', 'false');
+    }
+  });
+
+  /* ---------- start ---------- */
+  function start() {
+    buildSprites();
+    buildWords();
+    var n = words.length;
+    for (var i = 0; i < n; i++) {
+      order.push(i); Z.push(0); X.push(0); Y.push(0);
+      TT.push([0, 0]); DD.push([0, 0]); NN.push([0, 0, 0]);
+    }
+    resize();
+    if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+    window.addEventListener('resize', resize);
+    requestAnimationFrame(function (t) { prev = t; frame(t); });
+  }
+
+  var fontReady = (document.fonts && document.fonts.load)
+    ? document.fonts.load('italic 600 40px Fraunces', 'love')
+    : Promise.resolve();
+  Promise.race([fontReady, new Promise(function (r) { setTimeout(r, 1500); })])
+    .then(start, start);
+})();
+</script>
+
+</html>
